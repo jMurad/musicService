@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/middleware"
 	"github.com/jMurad/musicService/songLib/internal/service"
 	"github.com/jMurad/musicService/songLib/internal/store/pgstore"
+	"github.com/jMurad/musicService/songLib/pkg/middleware/logger"
 )
 
 type App struct {
@@ -38,7 +39,7 @@ func New(
 	router := chi.NewRouter()
 
 	router.Use(middleware.RequestID)
-	router.Use(middleware.Logger)
+	router.Use(logger.New(log))
 	router.Use(middleware.Recoverer)
 
 	router.Route("/song", func(r chi.Router) {

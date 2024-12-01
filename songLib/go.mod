@@ -7,7 +7,6 @@ require (
 	github.com/go-chi/chi/v5 v5.1.0
 	github.com/ilyakaznacheev/cleanenv v1.5.0
 	github.com/lib/pq v1.10.9
-	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f
 )
 
 require (

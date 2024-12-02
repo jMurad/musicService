@@ -14,9 +14,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	app := app.New(cfg)
-
-	// Start
-	app.Start()
+	// Run
+	app.Run(cfg)
 
 }

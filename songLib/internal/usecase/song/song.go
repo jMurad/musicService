@@ -1,4 +1,4 @@
-package service
+package song
 
 type Store interface {
 }

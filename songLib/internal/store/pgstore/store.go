@@ -18,6 +18,11 @@ func NewStore(storePath string, log *slog.Logger) (*store, error) {
 		return nil, err
 	}
 
+	err = db.Ping()
+	if err != nil {
+		return nil, err
+	}
+
 	return &store{
 		db:  db,
 		log: log,

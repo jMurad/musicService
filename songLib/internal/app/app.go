@@ -1,15 +1,18 @@
 package app
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
-	"time"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
-	"github.com/jMurad/musicService/songLib/internal/service"
-	"github.com/jMurad/musicService/songLib/internal/store/pgstore"
-	"github.com/jMurad/musicService/songLib/pkg/middleware/logger"
+	"github.com/jMurad/musicService/songLib/internal/config"
+	v1 "github.com/jMurad/musicService/songLib/internal/controller/api/v1"
+	"github.com/jMurad/musicService/songLib/pkg/httpserver"
+	"github.com/jMurad/musicService/songLib/pkg/logger"
 )
 
 type App struct {
@@ -17,53 +20,30 @@ type App struct {
 	server *http.Server
 }
 
-func New(
-	log *slog.Logger,
-	storePath string,
-	address string,
-	rwTimeout time.Duration,
-	idleTimeout time.Duration,
-) *App {
-	store, err := pgstore.NewStore(storePath, log)
-	log.Error("failed to open db", slog.Attr{
-		Key:   "error",
-		Value: slog.StringValue(err.Error()),
-	})
+func Run(cfg *config.Config) {
+	slogger := logger.SetupLogger(cfg.Env)
 
-	svc, err := service.NewService(store)
-	log.Error("failed to init service", slog.Attr{
-		Key:   "error",
-		Value: slog.StringValue(err.Error()),
-	})
+	// HTTP Server
+	handler := chi.NewRouter()
+	v1.NewRouter(handler, slogger)
+	httpServer := httpserver.New(cfg, handler)
 
-	router := chi.NewRouter()
+	// Waiting signal
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
-	router.Use(middleware.RequestID)
-	router.Use(logger.New(log))
-	router.Use(middleware.Recoverer)
+	var err error
 
-	router.Route("/song", func(r chi.Router) {
-		r.Get("/", Song(log, svc))
-		r.Get("/lyrics", Lyrics(log, svc))
-		r.Post("/", Add(log, svc))
-		r.Put("/", Edit(log, svc))
-		r.Delete("/", Delete(log, svc))
-	})
-
-	srv := &http.Server{
-		Addr:         address,
-		Handler:      router,
-		ReadTimeout:  rwTimeout,
-		WriteTimeout: rwTimeout,
-		IdleTimeout:  idleTimeout,
+	select {
+	case s := <-interrupt:
+		slogger.Info("app - Run - signal: " + s.String())
+	case err = <-httpServer.Notify():
+		slogger.Error(fmt.Sprintf("app - Run - httpServer.Notify: %w", err))
 	}
 
-	return &App{
-		log:    log,
-		server: srv,
+	// Shutdown
+	err = httpServer.Shutdown()
+	if err != nil {
+		slogger.Error(fmt.Sprintf("app - Run - httpServer.Shutdown: %w", err))
 	}
-}
-
-func (a *App) Start() error {
-	return nil
 }

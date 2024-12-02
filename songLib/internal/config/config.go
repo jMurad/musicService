@@ -1,7 +1,7 @@
 package config
 
 import (
-	"log"
+	"fmt"
 	"os"
 	"time"
 
@@ -15,26 +15,27 @@ type Config struct {
 }
 
 type HTTPServer struct {
-	Address     string        `yaml:"address" env-default:"localhost:8080"`
-	Timeout     time.Duration `yaml:"timeout" env-default:"4s"`
-	IdleTimeout time.Duration `yaml:"idle_timeout" env-default:"60s"`
+	Address         string        `yaml:"addr" env-default:"localhost:8080"`
+	Timeout         time.Duration `yaml:"timeout" env-default:"4s"`
+	IdleTimeout     time.Duration `yaml:"idle_timeout" env-default:"30s"`
+	ShutdownTimeout time.Duration `yaml:"shutdown_timeout" env-default:"3s"`
 }
 
-func MustLoad() *Config {
+func MustLoad() (*Config, error) {
 	configPath := os.Getenv("CONFIG_PATH")
 	if configPath == "" {
-		log.Fatal("CONFIG_PATH is not set")
+		return nil, fmt.Errorf("CONFIG_PATH is not set")
 	}
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		log.Fatalf("config file does not exist: %s", configPath)
+		return nil, fmt.Errorf("config file does not exist: %s", configPath)
 	}
 
 	var cfg Config
 
 	if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
-		log.Fatalf("cannot read config: %s", err)
+		return nil, fmt.Errorf("cannot read config: %s", err)
 	}
 
-	return &cfg
+	return &cfg, nil
 }

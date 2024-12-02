@@ -1,4 +1,4 @@
-package pgstore_test
+package postgres_test
 
 import (
 	"context"
@@ -7,44 +7,45 @@ import (
 	"testing"
 
 	"github.com/jMurad/musicService/songLib/internal/config"
-	"github.com/jMurad/musicService/songLib/internal/store/pgstore"
+	"github.com/jMurad/musicService/songLib/pkg/postgres"
 )
 
 var cfg *config.Config
+var log *slog.Logger
 
 func TestMain(m *testing.M) {
 	os.Setenv("CONFIG_PATH", "/Users/murad/goProjects/projects/musicService/songLib/config/config.yaml")
-	cfg = config.MustLoad()
+	cfg, _ = config.MustLoad()
+
+	log = slog.New(
+		slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+	)
 
 	os.Exit(m.Run())
 }
 
-func TestNewStore(t *testing.T) {
-	log := slog.New(
-		slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
-	)
-
-	_, err := pgstore.NewStore(cfg.StoragePath, log)
+func TestNew(t *testing.T) {
+	_, err := postgres.New(cfg.StoragePath, log)
 	if err != nil {
 		t.Error(err)
 	}
 
 }
 
-type Store interface {
-	AddSong(ctx context.Context, song pgstore.songs) error
-}
-
-func TestAddSong(t *testing.T) {
-	cfg := config.MustLoad()
-
-	log := slog.New(
-		slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
-	)
-
-	_, err := pgstore.NewStore(cfg.StoragePath, log)
+func TestAdd(t *testing.T) {
+	db, err := postgres.New(cfg.StoragePath, log)
 	if err != nil {
 		t.Error(err)
 	}
 
+	_, err = db.DB().ExecContext(context.Background(), "INSERT INTO songs (group_name, song_name, release_date, lyrics, link) VALUES($1, $2, $3, $4, $5)",
+		"groupName",
+		"songNmae",
+		"12.12.2024",
+		"la la la la la",
+		"http://link.com",
+	)
+	if err != nil {
+		t.Error(err)
+	}
 }

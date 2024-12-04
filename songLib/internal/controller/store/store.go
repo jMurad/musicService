@@ -59,3 +59,17 @@ func (s *SongStore) DeleteSong(ctx context.Context, del *model.Song) error {
 
 	return nil
 }
+
+func (s *SongStore) GetLyrics(ctx context.Context, song *model.Song) error {
+	err := s.db.DB().QueryRowContext(
+		ctx,
+		"SELECT lyrics FROM songs WHERE group_name=$1 AND song_name=$2",
+		song.GroupName,
+		song.SongName,
+	).Scan(&song.Lyrics)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

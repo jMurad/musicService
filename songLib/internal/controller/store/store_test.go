@@ -67,3 +67,15 @@ func TestDeleteSong(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestGetLyrics(t *testing.T) {
+	lyrics := song
+	lyrics.Lyrics = ""
+	err := st.GetLyrics(context.Background(), &lyrics)
+	if err != nil {
+		t.Error(err)
+	}
+	if song.Lyrics != lyrics.Lyrics {
+		t.Error("Lyrics:", lyrics.Lyrics)
+	}
+}

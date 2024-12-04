@@ -51,11 +51,18 @@ func TestAddSong(t *testing.T) {
 
 func TestEditSong(t *testing.T) {
 	editSong := song
-	editSong.GroupName = "Your Group"
-	editSong.SongName = "Your Song"
-	editSong.Link = "https://url.your/editsong"
+	editSong.GroupName = "New Group"
+	editSong.SongName = "New Song"
+	editSong.Link = "https://url.new/newsong"
 
 	err := st.EditSong(context.Background(), &song, &editSong)
+	if err != nil {
+		t.Error(err)
+	}
+}
+
+func TestDeleteSong(t *testing.T) {
+	err := st.DeleteSong(context.Background(), &song)
 	if err != nil {
 		t.Error(err)
 	}

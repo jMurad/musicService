@@ -35,27 +35,27 @@ func (s *SongStore) AddSong(ctx context.Context, song *model.Song) error {
 }
 
 func (s *SongStore) EditSong(ctx context.Context, old, new *model.Song) error {
-	err := s.db.DB().QueryRowContext(
-		ctx,
-		"SELECT song_id FROM songs WHERE group_name=$1 AND song_name=$2",
-		old.GroupName,
-		old.SongName,
-	).Scan(
-		&old.ID,
-	)
-	if err != nil {
-		return err
-	}
-
-	new.ID = old.ID
-
 	if columns, vals := columnsForUpdate(*old, *new); vals != nil {
-		vals = append(vals, old.ID)
-		queryUpd := fmt.Sprintf("UPDATE songs SET%s WHERE song_id = $%d", columns, len(vals))
-		_, err = s.db.DB().ExecContext(context.Background(), queryUpd, vals...)
+		vals = append(vals, old.GroupName, old.SongName)
+		queryUpd := fmt.Sprintf("UPDATE songs SET%s WHERE group_name=$%d AND song_name=$%d RETURNING song_id", columns, len(vals)-1, len(vals))
+		err := s.db.DB().QueryRowContext(context.Background(), queryUpd, vals...).Scan(&new.ID)
 		if err != nil {
 			return err
 		}
 	}
+	return nil
+}
+
+func (s *SongStore) DeleteSong(ctx context.Context, del *model.Song) error {
+	err := s.db.DB().QueryRowContext(
+		ctx,
+		"DELETE FROM songs WHERE group_name=$1 AND song_name=$2",
+		del.GroupName,
+		del.SongName,
+	).Scan(&del.ID)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

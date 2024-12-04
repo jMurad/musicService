@@ -21,6 +21,7 @@ type App struct {
 }
 
 func Run(cfg *config.Config) {
+	// Set Logger
 	slogger := logger.SetupLogger(cfg.Env)
 
 	// HTTP Server

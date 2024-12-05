@@ -29,7 +29,7 @@ func TestColumnsForFilter(t *testing.T) {
 	filter.ReleaseDate = toDate("03.12.2024")
 
 	var oper Operators = Operators{}
-	oper = append(oper, lk, le, gt)
+	oper = append(oper, Like, LessEqual, GreaterThan)
 
 	test := fmt.Sprintf("%s {op} $1 AND %s {op} $2 AND %s {op} $3", "song_name", "release_date", "lyrics")
 	for _, rpl := range oper {

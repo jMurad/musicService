@@ -2,38 +2,19 @@ package store
 
 import (
 	"fmt"
-	"reflect"
 	"strings"
-
-	"github.com/jMurad/musicService/songLib/internal/model"
 )
 
-func columnsForUpdate(old, new any) (string, []any) {
-	updateColumns := ""
+func columnsForFilter(filters Filters) (string, []any) {
+	columns := []string{}
 	vals := []any{}
-	counter := 0
-
-	oldV := reflect.ValueOf(old)
-	newV := reflect.ValueOf(new)
-	songV := reflect.ValueOf(model.Song{}).Type()
-
-	if songV != oldV.Type() || songV != newV.Type() {
-		return "", nil
+	for i, filter := range filters {
+		columns = append(
+			columns,
+			fmt.Sprintf("%s %s $%d", filter.Field, filter.Operators, i+1),
+		)
+		vals = append(vals, filter.Value)
 	}
 
-	for i := 0; i < songV.NumField(); i++ {
-		if !oldV.Field(i).Equal(newV.Field(i)) {
-			counter++
-			updateColumns += fmt.Sprintf(" %s = $%d,", strings.Split(songV.Field(i).Tag.Get("json"), ",")[0], counter)
-			vals = append(vals, newV.Field(i).Interface())
-		}
-	}
-
-	if len(vals) == 0 {
-		return "", nil
-	}
-
-	fmt.Println("vals:", vals)
-
-	return strings.TrimSuffix(updateColumns, ","), vals
+	return strings.Join(columns, " AND "), vals
 }

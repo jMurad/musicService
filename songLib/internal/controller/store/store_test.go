@@ -3,8 +3,10 @@ package store_test
 import (
 	"context"
 	"fmt"
+	"log"
 	"log/slog"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,62 +14,148 @@ import (
 	"github.com/jMurad/musicService/songLib/internal/controller/store"
 	"github.com/jMurad/musicService/songLib/internal/model"
 	"github.com/jMurad/musicService/songLib/pkg/postgres"
+	"github.com/lib/pq"
+	"github.com/stretchr/testify/assert"
+	"golang.org/x/exp/rand"
+
+	"github.com/brianvoe/gofakeit/v7"
 )
 
+const (
+	UniqueConstraint = pq.ErrorCode("23505")
+)
+
+func IsErrorCode(err error, errcode pq.ErrorCode) bool {
+	if pgerr, ok := err.(*pq.Error); ok {
+		return pgerr.Code == errcode
+	}
+	return false
+}
+
 var st *store.SongStore
-var song model.Song
 
 func TestMain(m *testing.M) {
 	os.Setenv("CONFIG_PATH", "/Users/murad/goProjects/projects/musicService/songLib/config/config.yaml")
-	cfg, _ := config.MustLoad()
-
-	log := slog.New(
-		slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
-	)
-	pg, _ := postgres.New(cfg.StoragePath, log)
-	st = store.NewSongStore(pg)
-
-	song = model.Song{
-		GroupName:   "My Group",
-		SongName:    "My Song",
-		ReleaseDate: time.Now(),
-		Lyrics:      "la la la",
-		Link:        "https://url.my/song",
+	cfg, err := config.MustLoad()
+	if err != nil {
+		log.Fatalln(err)
+		return
 	}
 
-	os.Exit(m.Run())
+	tlog := slog.New(
+		slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}),
+	)
+	db, err := postgres.New(cfg.StoragePath, tlog)
+	if err != nil {
+		log.Fatalln(err)
+		return
+	}
+
+	st = store.NewSongStore(db)
+
+	m.Run()
+}
+
+func newRandomSong() *model.Song {
+	rDate := gofakeit.Date()
+
+	return &model.Song{
+		GroupName:   gofakeit.Product().Name,
+		SongName:    gofakeit.GlobalFaker.Name(),
+		ReleaseDate: time.Date(rDate.Year(), rDate.Month(), rDate.Day(), 0, 0, 0, 0, rDate.Location()),
+		Lyrics:      lyricsGenerate(),
+	}
+}
+
+func lyricsGenerate() string {
+	rand.Seed(uint64(time.Now().UnixNano()))
+
+	alpha := "abcdefghijklmnopqrstuvwxyz"
+
+	var lyrics strings.Builder
+	k := len(alpha)
+
+	countWords := 4
+	countLines := 4
+	countCouplets := 4
+
+	for couplets := 0; couplets < countCouplets; couplets++ {
+		for lines := 0; lines < countLines; lines++ {
+			for words := 0; words < countWords; words++ {
+				for characters := 0; characters < 2+rand.Intn(8); characters++ {
+					c := alpha[rand.Intn(k)]
+					lyrics.WriteByte(c)
+				}
+				lyrics.WriteString(" ")
+			}
+			lyrics.WriteString("\n")
+		}
+		lyrics.WriteString("\n")
+	}
+	return lyrics.String()
+}
+
+func CreateRandomSong(t *testing.T) *model.Song {
+	newSong := newRandomSong()
+
+	song, err := st.AddSong(context.Background(), newSong)
+	assert.NoError(t, err)
+	assert.NotNil(t, song)
+	assert.Equal(t, newSong.GroupName, song.GroupName)
+	assert.Equal(t, newSong.SongName, song.SongName)
+	assert.Equal(t, newSong.ReleaseDate, song.ReleaseDate.UTC())
+	assert.Equal(t, newSong.Lyrics, song.Lyrics)
+	assert.Equal(t, newSong.Link, song.Link)
+
+	return song
 }
 
 func TestAddSong(t *testing.T) {
-	newSong := model.Song{}
-	// newSong.GroupName = "gn1"
-	// newSong.SongName = "sn1"
-	// newSong.Lyrics = "ly ly ly"
-	// newSong.Link = "new"
+	testCases := []struct {
+		name       string
+		testScript func()
+	}{
+		{"create random song", func() {
+			CreateRandomSong(t)
+		}},
+		{"unique GroupName and SongName error", func() {
+			newSong := CreateRandomSong(t)
 
-	err := st.AddSong(context.Background(), &newSong)
-	if err != nil {
-		t.Error(err)
+			violationSong, err := st.AddSong(context.Background(), newSong)
+			assert.Equal(t, true, IsErrorCode(err, UniqueConstraint))
+			assert.Nil(t, violationSong)
+
+		}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.testScript()
+		})
 	}
 }
 
 func TestEditSong(t *testing.T) {
+	newSong := newRandomSong()
+	song, _ := st.AddSong(context.Background(), newSong)
 
-	old := model.Song{
-		GroupName: "gn1",
-		SongName:  "sn1",
-	}
-	editSong := model.Song{}
-	editSong.Link = "EDIT"
-	// editSong.ReleaseDate = toDate("04.12.2024")
+	oldSong := &model.Song{}
+	oldSong.GroupName = newSong.GroupName
+	oldSong.SongName = newSong.SongName
 
-	err := st.EditSong(context.Background(), &old, &editSong)
-	if err != nil {
-		t.Error(err)
-	}
+	song, err := st.EditSong(context.Background(), oldSong, newSong)
+	assert.Error(t, err)
+	assert.NotNil(t, song)
+	assert.Equal(t, newSong.GroupName, song.GroupName)
+	assert.Equal(t, newSong.SongName, song.SongName)
+	assert.Equal(t, newSong.ReleaseDate, song.ReleaseDate)
+	assert.Equal(t, newSong.Lyrics, song.Lyrics)
+	assert.Equal(t, newSong.Link, song.Link)
+
 }
 
 func TestDeleteSong(t *testing.T) {
+	song := model.Song{}
 	err := st.DeleteSong(context.Background(), &song)
 	if err != nil {
 		t.Error(err)
@@ -75,6 +163,7 @@ func TestDeleteSong(t *testing.T) {
 }
 
 func TestGetLyrics(t *testing.T) {
+	song := model.Song{}
 	lyrics := song
 	lyrics.Lyrics = ""
 	err := st.GetLyrics(context.Background(), &lyrics)

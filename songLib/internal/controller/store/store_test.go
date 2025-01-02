@@ -56,15 +56,19 @@ func TestMain(m *testing.M) {
 	m.Run()
 }
 
-func newRandomSong() *model.Song {
-	rDate := gofakeit.Date()
+func fakeDate(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+}
 
-	return &model.Song{
+func newRandomSong() *model.Song {
+	newSong := &model.Song{
 		GroupName:   gofakeit.Product().Name,
 		SongName:    gofakeit.GlobalFaker.Name(),
-		ReleaseDate: time.Date(rDate.Year(), rDate.Month(), rDate.Day(), 0, 0, 0, 0, rDate.Location()),
+		ReleaseDate: fakeDate(gofakeit.Date()),
 		Lyrics:      lyricsGenerate(),
+		Link:        gofakeit.URL(),
 	}
+	return newSong
 }
 
 func lyricsGenerate() string {
@@ -121,10 +125,9 @@ func TestAddSong(t *testing.T) {
 		{"unique GroupName and SongName error", func() {
 			newSong := CreateRandomSong(t)
 
-			violationSong, err := st.AddSong(context.Background(), newSong)
+			song, err := st.AddSong(context.Background(), newSong)
 			assert.Equal(t, true, IsErrorCode(err, UniqueConstraint))
-			assert.Nil(t, violationSong)
-
+			assert.Nil(t, song)
 		}},
 	}
 
@@ -136,21 +139,49 @@ func TestAddSong(t *testing.T) {
 }
 
 func TestEditSong(t *testing.T) {
-	newSong := newRandomSong()
-	song, _ := st.AddSong(context.Background(), newSong)
+	testCases := []struct {
+		name       string
+		testScript func()
+	}{
+		{"edit song", func() {
+			old := *CreateRandomSong(t)
+			new := old
 
-	oldSong := &model.Song{}
-	oldSong.GroupName = newSong.GroupName
-	oldSong.SongName = newSong.SongName
+			new.ReleaseDate = fakeDate(gofakeit.Date())
+			new.Lyrics = lyricsGenerate()
+			new.Link = gofakeit.URL()
 
-	song, err := st.EditSong(context.Background(), oldSong, newSong)
-	assert.Error(t, err)
-	assert.NotNil(t, song)
-	assert.Equal(t, newSong.GroupName, song.GroupName)
-	assert.Equal(t, newSong.SongName, song.SongName)
-	assert.Equal(t, newSong.ReleaseDate, song.ReleaseDate)
-	assert.Equal(t, newSong.Lyrics, song.Lyrics)
-	assert.Equal(t, newSong.Link, song.Link)
+			song, err := st.EditSong(context.Background(), &old, &new)
+
+			assert.NotNil(t, song)
+			assert.NoError(t, err)
+			assert.Equal(t, new.ReleaseDate, song.ReleaseDate.UTC())
+			assert.Equal(t, new.Lyrics, song.Lyrics)
+			assert.Equal(t, new.Link, song.Link)
+		}},
+		{"edit unknown song", func() {
+			old := *CreateRandomSong(t)
+			new := old
+
+			old.GroupName = "unknown"
+			old.SongName = "unknown"
+
+			new.ReleaseDate = fakeDate(gofakeit.Date())
+			new.Lyrics = lyricsGenerate()
+			new.Link = gofakeit.URL()
+
+			song, err := st.EditSong(context.Background(), &old, &new)
+
+			assert.ErrorIs(t, err, store.ErrSongNotFound)
+			assert.Nil(t, song)
+		}},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.testScript()
+		})
+	}
 
 }
 

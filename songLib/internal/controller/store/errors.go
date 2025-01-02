@@ -3,6 +3,7 @@ package store
 import "errors"
 
 var (
-	ErrSongNotFound = errors.New("song not found")
-	ErrSongExists   = errors.New("song exists")
+	ErrSongNotFound  = errors.New("song not found")
+	ErrSongExists    = errors.New("song exists")
+	ErrCanNotConnect = errors.New("cannot connect")
 )

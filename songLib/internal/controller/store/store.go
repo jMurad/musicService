@@ -10,9 +10,6 @@ import (
 	"github.com/jMurad/musicService/songLib/pkg/postgres"
 )
 
-// type Filter [2]string
-// type Filters []Filter
-
 type Filters []struct {
 	Field     string
 	Operators string
@@ -44,26 +41,31 @@ func NewSongStore(db *postgres.Postgres) *SongStore {
 	}
 }
 
-func (s *SongStore) AddSong(ctx context.Context, new *model.Song) error {
-	_, err := s.db.DB().ExecContext(
+func (s *SongStore) AddSong(ctx context.Context, new *model.Song) (*model.Song, error) {
+	row := s.db.DB().QueryRowContext(
 		ctx,
-		"INSERT INTO songs (group_name, song_name, release_date, lyrics, link) VALUES($1, $2, $3, $4, $5)",
+		"INSERT INTO songs (group_name, song_name, release_date, lyrics, link) VALUES($1, $2, $3, $4, $5) RETURNING *",
 		new.GroupName,
 		new.SongName,
 		new.ReleaseDate,
 		new.Lyrics,
 		new.Link,
 	)
-	if err != nil {
-		if strings.Contains(err.Error(), `duplicate key value violates unique constraint`) {
-			return ErrSongExists
-		}
-		return err
+	if row.Err() != nil {
+
+		return nil, row.Err()
 	}
-	return nil
+
+	var song model.Song
+	err := row.Scan(&song.ID, &song.GroupName, &song.SongName, &song.ReleaseDate, &song.Lyrics, &song.Link)
+	if err != nil {
+		return nil, err
+	}
+
+	return &song, nil
 }
 
-func (s *SongStore) EditSong(ctx context.Context, old, new *model.Song) error {
+func (s *SongStore) EditSong(ctx context.Context, old, new *model.Song) (*model.Song, error) {
 	queryUpd := "UPDATE songs SET " +
 		"group_name = COALESCE(NULLIF($1, ''), group_name), " +
 		"song_name = COALESCE(NULLIF($2, ''), song_name), " +
@@ -71,7 +73,7 @@ func (s *SongStore) EditSong(ctx context.Context, old, new *model.Song) error {
 		"lyrics = COALESCE(NULLIF($4, ''), lyrics), " +
 		"link = COALESCE(NULLIF($5, ''), link) " +
 		"WHERE group_name = $6 AND song_name = $7 " +
-		"RETURNING song_id"
+		"RETURNING *"
 
 	vals := []any{
 		new.GroupName,
@@ -83,24 +85,36 @@ func (s *SongStore) EditSong(ctx context.Context, old, new *model.Song) error {
 		old.SongName,
 	}
 
-	err := s.db.DB().QueryRowContext(ctx, queryUpd, vals...).Scan(&new.ID)
-	if err != nil {
-		if strings.Contains(err.Error(), "no rows in result set") {
-			return ErrSongNotFound
-		}
-		return err
+	row := s.db.DB().QueryRowContext(ctx, queryUpd, vals...)
+	if row.Err() != nil {
+		return nil, row.Err()
 	}
 
-	return nil
+	var song model.Song
+	err := row.Scan(&song.ID, &song.GroupName, &song.SongName, &song.ReleaseDate, &song.Lyrics, &song.Link)
+	if err != nil {
+		if strings.Contains(err.Error(), "no rows in result set") {
+			return nil, ErrSongNotFound
+		}
+		return nil, err
+	}
+
+	return &song, nil
 }
 
 func (s *SongStore) DeleteSong(ctx context.Context, del *model.Song) error {
-	err := s.db.DB().QueryRowContext(
+	row := s.db.DB().QueryRowContext(
 		ctx,
-		"DELETE FROM songs WHERE group_name=$1 AND song_name=$2",
+		"DELETE FROM songs WHERE group_name=$1 AND song_name=$2 RETURNING *",
 		del.GroupName,
 		del.SongName,
-	).Scan(&del.ID)
+	)
+	if row.Err() != nil {
+		return row.Err()
+	}
+
+	var song model.Song
+	err := row.Scan(&song.ID, &song.GroupName, &song.SongName, &song.ReleaseDate, &song.Lyrics, &song.Link)
 	if err != nil {
 		return err
 	}
@@ -109,12 +123,17 @@ func (s *SongStore) DeleteSong(ctx context.Context, del *model.Song) error {
 }
 
 func (s *SongStore) GetLyrics(ctx context.Context, song *model.Song) error {
-	err := s.db.DB().QueryRowContext(
+	row := s.db.DB().QueryRowContext(
 		ctx,
-		"SELECT lyrics FROM songs WHERE group_name=$1 AND song_name=$2",
+		"SELECT * FROM songs WHERE group_name=$1 AND song_name=$2",
 		song.GroupName,
 		song.SongName,
-	).Scan(&song.Lyrics)
+	)
+	if row.Err() != nil {
+		return row.Err()
+	}
+
+	err := row.Scan(&song.ID, &song.GroupName, &song.SongName, &song.ReleaseDate, &song.Lyrics, &song.Link)
 	if err != nil {
 		return err
 	}
